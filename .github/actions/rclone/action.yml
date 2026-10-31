@@ -1,0 +1,30 @@
+name: rclone setup
+description: Install rclone, write its config and work out this job's share of the free Drive space
+inputs:
+  conf:
+    description: rclone.conf contents with a [pax] Google Drive remote (empty = dry run only)
+    required: false
+  jobs:
+    description: number of jobs sharing the Drive in one run
+    default: "1"
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        RCLONE_CONF: ${{ inputs.conf }}
+        JOBS: ${{ inputs.jobs }}
+      run: |
+        curl -fsSL https://rclone.org/install.sh | sudo bash >/dev/null
+        mkdir -p ~/.config/rclone state
+        if [ -z "$RCLONE_CONF" ]; then
+          echo "No RCLONE_CONF secret: dry run with a 3 GB budget"
+          echo 3 > budget.txt
+          exit 0
+        fi
+        printf '%s\n' "$RCLONE_CONF" > ~/.config/rclone/rclone.conf
+        chmod 600 ~/.config/rclone/rclone.conf
+        # keep 20 GB free; each job takes an equal share, at most 180 GB per run (Drive upload limit 750 GB/day)
+        free=$(rclone about pax: --json | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('free', 10**15))")
+        python3 -c "f=$free/2**30; b=max(0.0, min(180.0, (f-20)/$JOBS)); print(round(b,2))" > budget.txt
+        echo "Drive free: $(python3 -c "print(round($free/2**30,1))") GB; job budget: $(cat budget.txt) GB"
