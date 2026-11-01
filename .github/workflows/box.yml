@@ -1,0 +1,63 @@
+name: box
+
+# One-off: fills the Box account (free plan, 10 GB) with 3D models under 250 MB, leaving about 1 GB free.
+# Needs the BOX_CONF secret (an rclone.conf with a [box] remote). Run state lives in the Actions cache.
+# This repository is public: logs print counts only.
+
+on:
+  workflow_dispatch:
+    inputs:
+      keep_free_gb:
+        description: "GB to leave free on Box"
+        default: "1"
+
+concurrency:
+  group: box
+  cancel-in-progress: false
+
+env:
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  box:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: rclone
+        env:
+          BOX_CONF: ${{ secrets.BOX_CONF }}
+          KEEP: ${{ inputs.keep_free_gb || '1' }}
+        run: |
+          curl -fsSL https://rclone.org/install.sh | sudo bash >/dev/null
+          mkdir -p ~/.config/rclone state
+          printf '%s\n' "$BOX_CONF" > ~/.config/rclone/rclone.conf
+          chmod 600 ~/.config/rclone/rclone.conf
+          free=$(rclone about box: --json | python3 -c "import json,sys; print(json.load(sys.stdin)['free'])")
+          # a quarter GB of headroom: the last file can pass the budget by up to its own size
+          python3 -c "print(round(max(0.0, $free/2**30 - $KEEP - 0.25), 2))" > budget.txt
+          echo "Box free: $(python3 -c "print(round($free/2**30,2))") GB; budget: $(cat budget.txt) GB"
+      - name: Restore run state
+        uses: actions/cache/restore@v4
+        with:
+          path: state
+          key: state-box-${{ github.run_id }}
+          restore-keys: state-box-
+      - name: Collect
+        run: |
+          python -m collector --sources box_models --state state/box.json --remote "box:3D Models" \
+            --budget-gb "$(cat budget.txt)" --minutes 320 --live
+      - name: Box space left
+        if: always()
+        run: rclone about box: | head -3
+      - name: Save run state
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: state
+          key: state-box-${{ github.run_id }}-${{ github.run_attempt }}
