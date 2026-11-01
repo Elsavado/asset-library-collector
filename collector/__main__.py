@@ -7,10 +7,10 @@ import os
 import time
 import traceback
 
-from . import brex, cad, focus, images, models, sheets, zoom
+from . import adobe, brex, cad, focus, images, models, sheets, zoom
 from .common import Sink, State
 
-SOURCES = {**models.SOURCES, **cad.SOURCES, **images.SOURCES, **focus.SOURCES, **sheets.SOURCES, **brex.SOURCES, **zoom.SOURCES}
+SOURCES = {**adobe.SOURCES, **models.SOURCES, **cad.SOURCES, **images.SOURCES, **focus.SOURCES, **sheets.SOURCES, **brex.SOURCES, **zoom.SOURCES}
 
 
 def main():
