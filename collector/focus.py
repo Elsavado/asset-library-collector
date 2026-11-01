@@ -11,7 +11,7 @@ from .util import IMAGES, download
 
 THEMES = {
     "Buildings & Architecture": {
-        "Photos": ["skyscraper", "modern architecture", "modern house exterior", "villa", "apartment building",
+        "Photos": ["house", "skyscraper", "modern architecture", "modern house exterior", "villa", "apartment building",
                    "office building", "glass facade", "brutalist architecture", "art deco building", "gothic cathedral",
                    "mosque architecture", "temple architecture", "castle", "bridge architecture", "stadium", "museum building",
                    "train station architecture", "airport terminal", "interior design living room", "kitchen interior",
