@@ -111,9 +111,20 @@ def github_models(sink, st, cache="cache/github.parquet"):
 
 
 def thingi10k(sink, st):
-    """Thingi10K: 10,000 3D-printing meshes from Thingiverse (research dataset), streamed from its archive."""
-    if st.get("t10k_done"):
-        return 0
+    """Thingi10K: 10,000 3D-printing meshes from Thingiverse (research dataset), streamed from its archive.
+    A dropped connection resumes from the last saved member (up to 5 tries a run)."""
+    n = 0
+    for _ in range(5):
+        if st.get("t10k_done") or sink.full():
+            break
+        try:
+            n += _thingi10k(sink, st)
+        except Exception as exc:
+            print(f"thingi10k: stream dropped ({type(exc).__name__}), resuming")
+    return n
+
+
+def _thingi10k(sink, st):
     s = session()
     skip = st.get("t10k_i", 0)
     n = i = 0
@@ -128,14 +139,12 @@ def thingi10k(sink, st):
                 if i <= skip:
                     continue
                 if sink.full():
-                    st["t10k_i"] = i - 1
                     return n
                 e = m.name.rsplit(".", 1)[-1].lower()
-                if e not in FOLDER:
-                    continue
-                f = tf.extractfile(m)
-                sink.write_bytes(f"{MODELS}/{FOLDER[e]}/Thingi10K/{safe(m.name.rsplit('/', 1)[-1], 100)}", f.read())
-                n += 1
+                if e in FOLDER:
+                    data = tf.extractfile(m).read()
+                    sink.write_bytes(f"{MODELS}/{FOLDER[e]}/Thingi10K/{safe(m.name.rsplit('/', 1)[-1], 100)}", data)
+                    n += 1
                 st["t10k_i"] = i
     st["t10k_done"] = True
     return n

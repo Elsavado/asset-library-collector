@@ -79,16 +79,17 @@ LFS_PTR = b"version https://git-lfs"
 
 
 def gh_file(s, sink, repo, ref, path, rel, cap):
-    """One file from a GitHub repository; Git LFS pointers are replaced by the real content."""
-    n = download(s, f"https://raw.githubusercontent.com/{repo}/{ref}/{path}", cap, sink, rel, not_html)
-    if not n:
-        return 0
-    p = sink.path(rel)
-    with open(p, "rb") as f:
-        lfs = f.read(64).startswith(LFS_PTR)
+    """One file from a GitHub repository; Git LFS pointers are replaced by the real content. The pointer is
+    spotted before the file is handed to the sink (a hand-over can ship it to Drive at once)."""
+    lfs = []
+
+    def check(head):
+        if head.startswith(LFS_PTR):
+            lfs.append(1)
+            return False
+        return not_html(head)
+
+    n = download(s, f"https://raw.githubusercontent.com/{repo}/{ref}/{path}", cap, sink, rel, check)
     if lfs:
-        sink.pending -= n
-        sink.files -= 1
-        os.remove(p)
         n = download(s, f"https://media.githubusercontent.com/media/{repo}/{ref}/{path}", cap, sink, rel, not_html)
     return n

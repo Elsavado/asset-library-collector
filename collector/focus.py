@@ -39,11 +39,16 @@ THEMES = {
 }
 
 
+ROUNDS = 60
+
+
 def _queries():
-    for theme, kinds in THEMES.items():
-        for kind, qs in kinds.items():
-            for q in qs:
-                yield theme, kind, q
+    """Every query, interleaved across the four groups (building photos, building renders, car photos, car
+    renders), repeated ROUNDS times: each source takes a few pages per visit, so all groups grow together."""
+    groups = [[(theme, kind, q) for q in qs] for theme, kinds in THEMES.items() for kind, qs in kinds.items()]
+    order = [g[i] for i in range(max(map(len, groups))) for g in groups if i < len(g)]
+    for _ in range(ROUNDS):
+        yield from order
 
 
 def _save(s, sink, st, url, theme, kind, q, source, title, e):
@@ -68,7 +73,9 @@ def commons(sink, st):
     for theme, kind, q in _queries():
         off = pos.get(q, 0)
         search = f"filetype:{'bitmap' if kind == 'Photos' else 'bitmap|drawing'} {q}"
-        while off is not None and off < 9950 and not sink.full():
+        took = 0
+        while off is not None and off < 9950 and took < 2 and not sink.full():
+            took += 1
             r = get(s, "https://commons.wikimedia.org/w/api.php", params={
                 "action": "query", "format": "json", "generator": "search", "gsrnamespace": 6, "gsrsearch": search,
                 "gsrlimit": 50, "gsroffset": off, "prop": "imageinfo", "iiprop": "url|size|mime", "iiurlwidth": 2560})
@@ -95,7 +102,9 @@ def openverse(sink, st):
     n = 0
     for theme, kind, q in _queries():
         page = pos.get(q, 1)
-        while page and page <= 20 and not sink.full():
+        took = 0
+        while page and page <= 20 and took < 2 and not sink.full():
+            took += 1
             r = get(s, "https://api.openverse.org/v1/images/", tries=3, params={
                 "q": q, "page": page, "page_size": 20, "category": "photograph" if kind == "Photos" else
                 "illustration,digitized_artwork"})
@@ -122,7 +131,9 @@ def unsplash(sink, st):
     n = 0
     for theme, kind, q in _queries():
         page = pos.get(q, 1)
-        while page and page <= 30 and not sink.full():
+        took = 0
+        while page and page <= 30 and took < 2 and not sink.full():
+            took += 1
             r = s.get("https://api.unsplash.com/search/photos", params={"query": q, "page": page, "per_page": 30},
                       timeout=60)
             if r.status_code == 403:  # hourly limit: wait for the next hour
@@ -151,7 +162,9 @@ def pexels(sink, st):
     n = 0
     for theme, kind, q in _queries():
         page = pos.get(q, 1)
-        while page and page <= 40 and not sink.full():
+        took = 0
+        while page and page <= 40 and took < 1 and not sink.full():
+            took += 1
             r = s.get("https://api.pexels.com/v1/search", params={"query": q, "page": page, "per_page": 80}, timeout=60)
             if r.status_code == 429:
                 time.sleep(600)
@@ -178,7 +191,9 @@ def pixabay(sink, st):
     n = 0
     for theme, kind, q in _queries():
         page = pos.get(q, 1)
-        while page and page <= 3 and not sink.full():  # the API returns at most 500 results per search
+        took = 0
+        while page and page <= 3 and took < 1 and not sink.full():  # the API returns at most 500 results per search
+            took += 1
             r = get(s, "https://pixabay.com/api/", params={
                 "key": key, "q": q, "page": page, "per_page": 200, "safesearch": "true",
                 "image_type": "photo" if kind == "Photos" else "illustration"})

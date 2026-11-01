@@ -326,7 +326,7 @@ def build_company(i, specs):
         m = (m.replace(day=28) + timedelta(days=4)).replace(day=1)
     for _ in range(size // 3 * max(1, months // 6)):
         u = rnd.choice(users)
-        d = start + timedelta(days=rnd.randint(0, (end - start).days))
+        d = start + timedelta(days=rnd.randint(0, max(0, (end - start).days)))
         cents = rnd.randint(1500, 45000)
         expenses.append({"id": _id("expense"), "memo": rnd.choice(["Mileage to client site", "Home office supplies",
                                                                    "Parking", "Internet stipend", "Team snacks"]),
@@ -449,7 +449,8 @@ def companies(sink, st):
                   [[k[0], k[1], round(v, 2)] for k, v in sorted(gl.items())], {"GL Account": 32})
         save_book(sink, f"{base}/Exports/expense_report.xlsx", wb)
         rnd = random.Random(i)
-        for e in rnd.sample([e for e in expenses if e.get("merchant")], min(25, len(expenses))):
+        carded = [e for e in expenses if e.get("merchant")]
+        for e in rnd.sample(carded, min(25, len(carded))):
             sink.write_bytes(f"{base}/Receipts/{e['purchased_at'][:10]} {safe(e['merchant']['raw_descriptor'], 30)} "
                              f"{e['id'][-6:]}.pdf", _receipt_pdf(company["legal_name"], e, e["_user"]))
         i += 1
