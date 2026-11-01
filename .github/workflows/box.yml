@@ -54,7 +54,8 @@ jobs:
             --budget-gb "$(cat budget.txt)" --minutes 320 --live
       - name: Box space left
         if: always()
-        run: rclone about box: | head -3
+        run: |
+          rclone about box: | head -3
       - name: Save run state
         if: always()
         uses: actions/cache/save@v4
