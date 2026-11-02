@@ -1,6 +1,6 @@
 name: collect
 
-# Five jobs fill the Drive in parallel: Sketchfab models, GitHub models, other model collections, images
+# Ten jobs fill the Drive in parallel: Sketchfab models (three lanes), GitHub models, documents (two jobs), other model collections, images
 # (buildings and cars first) and the assets job (Brex, Zoom calls, spreadsheets, CAD). Each run starts the next one when it ends, so the
 # collection keeps going on its own (the schedule is only a backup). Uploads happen only when repo variable
 # LIVE is "true"; CHAIN="off" stops the hand-over. Run state lives in the Actions cache, not on Drive.
@@ -37,6 +37,14 @@ jobs:
         include:
           - name: sketchfab
             sources: sketchfab
+          - name: sketchfab_mid
+            sources: sketchfab_mid
+          - name: sketchfab_rev
+            sources: sketchfab_rev
+          - name: docs_reports
+            sources: ntrs,fedreg
+          - name: docs_web
+            sources: commoncrawl,gutenberg
           - name: github
             sources: github_models
           - name: collections
@@ -58,7 +66,7 @@ jobs:
       - uses: ./.github/actions/rclone
         with:
           conf: ${{ secrets.RCLONE_CONF }}
-          jobs: "5"
+          jobs: "10"
       - name: Restore run state
         uses: actions/cache/restore@v4
         with:

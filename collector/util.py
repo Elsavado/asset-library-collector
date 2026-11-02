@@ -1,6 +1,8 @@
 """Download helpers shared by every source."""
 import os
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from .common import get, session
 
@@ -93,3 +95,49 @@ def gh_file(s, sink, repo, ref, path, rel, cap):
     if lfs:
         n = download(s, f"https://media.githubusercontent.com/media/{repo}/{ref}/{path}", cap, sink, rel, not_html)
     return n
+
+
+_local = threading.local()
+
+
+def _grab(url, cap, magic, conv=None, timeout=120):
+    """Body of url (in memory) when it is non-empty, within cap and (with magic) the right file type; conv, when
+    given, turns the body into what is saved. A 429 (rate limit) waits for the limit to reset, up to 5 times."""
+    s = getattr(_local, "s", None) or session()
+    _local.s = s
+    try:
+        for attempt in range(6):
+            with s.get(url, stream=True, timeout=timeout) as r:
+                if r.status_code == 429 and attempt < 5:
+                    reset = int(r.headers.get("Retry-After") or 0) or int(r.headers.get("X-RateLimit-Reset") or 0) - time.time()
+                    time.sleep(min(max(reset, 30), 600))
+                    continue
+                if r.status_code != 200 or int(r.headers.get("Content-Length") or 0) > cap:
+                    return None
+                buf = bytearray()
+                for chunk in r.iter_content(1 << 20):
+                    buf += chunk
+                    if len(buf) > cap:
+                        return None
+            break
+        if not buf or (magic and not magic(bytes(buf[:512]))):
+            return None
+        return conv(bytes(buf)) if conv else bytes(buf)
+    except Exception:
+        return None
+
+
+POOL = ThreadPoolExecutor(12)
+
+
+def fetch_many(sink, items):
+    """Downloads (url, cap, rel, magic[, conv]) items 12 at a time; files reach the sink from this thread only (a
+    hand-over to Drive never sees a half-written file). Returns the rels saved."""
+    futs = {POOL.submit(_grab, *it[:2], *it[3:]): it[2] for it in items}
+    saved = []
+    for f in as_completed(futs):
+        body = f.result()
+        if body:
+            sink.write_bytes(futs[f], body)
+            saved.append(futs[f])
+    return saved

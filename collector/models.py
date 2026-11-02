@@ -11,7 +11,7 @@ import time
 from urllib.parse import quote
 
 from .common import get, safe, session
-from .util import MODELS, download, gh, gh_file, gh_tree, not_html
+from .util import MODELS, download, fetch_many, gh, gh_file, gh_tree, not_html
 
 HF = "https://huggingface.co/datasets"
 OBJA = f"{HF}/allenai/objaverse/resolve/main"
@@ -35,8 +35,13 @@ def _parquet(s, url, path, columns, filters=None):
     return pq.read_table(path, columns=columns, filters=filters)
 
 
-def sketchfab(sink, st):
-    """Objaverse 1.0: ~800k Sketchfab models as .glb, filed by Sketchfab category."""
+# models each Sketchfab lane adds from 2026-11-02 on (with the GitHub lane the library reaches ~230,000)
+QUOTA = {"sketchfab": 50000, "sketchfab_mid": 50000, "sketchfab_rev": 50000, "github_models": 20000}
+
+
+def sketchfab(sink, st, lane="sketchfab"):
+    """Objaverse 1.0: ~800k Sketchfab models as .glb, filed by Sketchfab category. Three lanes walk the 160
+    shards from the start, from the middle and from the end, so they never fetch the same models."""
     s = session()
     pos = st.setdefault("skf", {"shard": 0, "i": 0})
     r = get(s, f"{OBJA}/object-paths.json.gz")
@@ -47,22 +52,29 @@ def sketchfab(sink, st):
     for uid, p in paths.items():
         shards.setdefault(p.split("/")[1], []).append((uid, p))
     order = sorted(shards)
+    if lane == "sketchfab_mid":
+        order = order[len(order) // 2:]
+    elif lane == "sketchfab_rev":
+        order = order[::-1]
     n = 0
-    while pos["shard"] < len(order) and not sink.full():
+    while pos["shard"] < len(order) and st.get("added", 0) < QUOTA[lane] and not sink.full():
         shard = order[pos["shard"]]
         m = get(s, f"{OBJA}/metadata/{shard}.json.gz")
         meta = json.loads(gzip.decompress(m.content)) if m else {}
         objs = sorted(shards[shard])
-        while pos["i"] < len(objs) and not sink.full():
-            uid, p = objs[pos["i"]]
-            pos["i"] += 1
-            md = meta.get(uid) or {}
-            cats = md.get("categories") or []
-            cat = safe(cats[0].get("name") if cats and isinstance(cats[0], dict) else "Uncategorised", 50)
-            name = safe(md.get("name") or uid, 70)
-            if download(s, f"{OBJA}/{p}", CAP, sink, f"{MODELS}/GLB/Sketchfab/{cat}/{name} {uid[:8]}.glb",
-                        lambda h: h[:4] == b"glTF"):
-                n += 1
+        while pos["i"] < len(objs) and st.get("added", 0) < QUOTA[lane] and not sink.full():
+            items = []
+            for uid, p in objs[pos["i"]:pos["i"] + 48]:  # 48 at a time, fetched 12 in parallel
+                md = meta.get(uid) or {}
+                cats = md.get("categories") or []
+                cat = safe(cats[0].get("name") if cats and isinstance(cats[0], dict) else "Uncategorised", 50)
+                name = safe(md.get("name") or uid, 70)
+                items.append((f"{OBJA}/{p}", CAP, f"{MODELS}/GLB/Sketchfab/{cat}/{name} {uid[:8]}.glb",
+                              lambda h: h[:4] == b"glTF"))
+            pos["i"] += len(items)
+            got = len(fetch_many(sink, items))
+            n += got
+            st["added"] = st.get("added", 0) + got
         if pos["i"] >= len(objs):
             pos["shard"], pos["i"] = pos["shard"] + 1, 0
     return n
@@ -85,7 +97,7 @@ def github_models(sink, st, cache="cache/github.parquet"):
     pos = st.setdefault("ghm", {})
     n = 0
     live = [ft for ft in GH_TYPES if len(by_type[ft])]
-    while live and not sink.full():
+    while live and st.get("added", 0) < QUOTA["github_models"] and not sink.full():
         for ft in list(live):
             i = pos.get(ft, 0)
             if i >= len(by_type[ft]):
@@ -103,6 +115,7 @@ def github_models(sink, st, cache="cache/github.parquet"):
             base = f"{MODELS}/{FOLDER[ft]}/GitHub/{safe(repo, 60)} {sha[:6]}"
             if gh_file(s, sink, f"{owner}/{repo}", sha, quote(path), f"{base}/{safe(fname, 100)}", CAP):
                 n += 1
+                st["added"] = st.get("added", 0) + 1
                 for side in SIDECAR.get(ft, []):
                     sp = path.rsplit(".", 1)[0] + "." + side
                     gh_file(s, sink, f"{owner}/{repo}", sha, quote(sp),
@@ -270,5 +283,6 @@ def thingiverse(sink, st, cache="cache/thingiverse.parquet"):
     return n
 
 
-SOURCES = {"sketchfab": sketchfab, "github_models": github_models, "thingi10k": thingi10k,
+SOURCES = {"sketchfab": sketchfab, "sketchfab_mid": lambda sink, st: sketchfab(sink, st, "sketchfab_mid"),
+           "sketchfab_rev": lambda sink, st: sketchfab(sink, st, "sketchfab_rev"), "github_models": github_models, "thingi10k": thingi10k,
            "smithsonian": smithsonian, "polyhaven": polyhaven, "curated": curated, "thingiverse": thingiverse}
