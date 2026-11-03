@@ -1,0 +1,48 @@
+name: notion
+
+# Builds the Halcyon Vertex Studio workspace in Notion (sections, databases, 2020-today history).
+# Resumable: progress is kept in the Actions cache; each run continues where the last stopped.
+# This repository is public: logs print counts only.
+
+on:
+  workflow_dispatch:
+    inputs:
+      minutes:
+        description: "time budget (minutes)"
+        default: "320"
+  schedule:
+    - cron: "41 */6 * * *"
+
+concurrency:
+  group: notion
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: vars.NOTION_BUILD != 'off'
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests==2.32.3
+      - name: Restore build state
+        uses: actions/cache/restore@v4
+        with:
+          path: state
+          key: notion-${{ github.run_id }}
+          restore-keys: notion-
+      - name: Build
+        timeout-minutes: 330
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_ROOT: 40da22cfdc4d80fcbccde2c28a42e0c8
+        run: python -m studio --minutes "${{ inputs.minutes || 320 }}"
+      - name: Save build state
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: state
+          key: notion-${{ github.run_id }}-${{ github.run_attempt }}
