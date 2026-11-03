@@ -29,13 +29,18 @@ def download(s, url, cap, sink, rel, magic=None, timeout=180):
             if r.status_code != 200 or int(r.headers.get("Content-Length") or 0) > cap:
                 return 0
             n = 0
+            stop_at = min(sink.deadline, sink.slice_end + 20 * 60)  # a slow stream must not outlive the job
+            late = False
             with open(p, "wb") as f:
                 for chunk in r.iter_content(1 << 20):
                     n += len(chunk)
                     if n > cap:
                         break
+                    if time.time() > stop_at:
+                        late = True
+                        break
                     f.write(chunk)
-        bad = n > cap or n == 0
+        bad = n > cap or n == 0 or late
         if not bad and magic:
             with open(p, "rb") as f:
                 bad = not magic(f.read(512))
@@ -98,6 +103,7 @@ def gh_file(s, sink, repo, ref, path, rel, cap):
 
 
 _local = threading.local()
+STOP_AT = [float("inf")]  # set from the sink by fetch_many
 
 
 def _grab(url, cap, magic, conv=None, timeout=120):
@@ -110,14 +116,17 @@ def _grab(url, cap, magic, conv=None, timeout=120):
             with s.get(url, stream=True, timeout=timeout) as r:
                 if r.status_code == 429 and attempt < 5:
                     reset = int(r.headers.get("Retry-After") or 0) or int(r.headers.get("X-RateLimit-Reset") or 0) - time.time()
-                    time.sleep(min(max(reset, 30), 600))
+                    wait = min(max(reset, 30), 600)
+                    if time.time() + wait > STOP_AT[0]:
+                        return None
+                    time.sleep(wait)
                     continue
                 if r.status_code != 200 or int(r.headers.get("Content-Length") or 0) > cap:
                     return None
                 buf = bytearray()
                 for chunk in r.iter_content(1 << 20):
                     buf += chunk
-                    if len(buf) > cap:
+                    if len(buf) > cap or time.time() > STOP_AT[0]:
                         return None
             break
         if not buf or (magic and not magic(bytes(buf[:512]))):
@@ -133,6 +142,7 @@ POOL = ThreadPoolExecutor(12)
 def fetch_many(sink, items):
     """Downloads (url, cap, rel, magic[, conv]) items 12 at a time; files reach the sink from this thread only (a
     hand-over to Drive never sees a half-written file). Returns the rels saved."""
+    STOP_AT[0] = min(sink.deadline, sink.slice_end + 20 * 60)
     futs = {POOL.submit(_grab, *it[:2], *it[3:]): it[2] for it in items}
     saved = []
     for f in as_completed(futs):

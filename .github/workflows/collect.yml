@@ -74,6 +74,7 @@ jobs:
           key: state-${{ matrix.name }}-${{ github.run_id }}
           restore-keys: state-${{ matrix.name }}-
       - name: Collect
+        timeout-minutes: 325
         env:
           GITHUB_TOKEN: ${{ github.token }}
           THINGIVERSE_TOKEN: ${{ secrets.THINGIVERSE_TOKEN }}
@@ -85,7 +86,7 @@ jobs:
           budget=$(cat budget.txt)
           flag=$([ "$LIVE" = "true" ] && echo --live || echo "")
           python -m collector --sources "${{ matrix.sources }}" --state state/${{ matrix.name }}.json \
-            --budget-gb "$budget" --minutes "${{ inputs.minutes || 320 }}" $flag
+            --budget-gb "$budget" --minutes "${{ inputs.minutes || 300 }}" $flag
       - name: Save run state
         if: always()
         uses: actions/cache/save@v4
