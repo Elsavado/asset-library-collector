@@ -51,6 +51,16 @@ jobs:
             sources: thingiverse,thingi10k,smithsonian,polyhaven,curated
           - name: images
             sources: focus,images
+            focus_parts: commons
+            images_parts: commons
+          - name: images_web
+            sources: focus
+            focus_parts: openverse,pixabay,unsplash,pexels
+            images_parts: none
+          - name: images_museums
+            sources: images
+            focus_parts: none
+            images_parts: nasa,met
           - name: assets
             sources: adobe,brex_reference,brex_companies,zoom_generated,zoom_real,sheets,cad
     steps:
@@ -66,13 +76,21 @@ jobs:
       - uses: ./.github/actions/rclone
         with:
           conf: ${{ secrets.RCLONE_CONF }}
-          jobs: "10"
+          jobs: "12"
       - name: Restore run state
         uses: actions/cache/restore@v4
         with:
           path: state
           key: state-${{ matrix.name }}-${{ github.run_id }}
-          restore-keys: state-${{ matrix.name }}-
+          restore-keys: |
+            state-${{ matrix.name }}-
+            state-images-
+      - name: Seed a new image job from the old images state
+        if: startsWith(matrix.name, 'images_')
+        run: |
+          if [ ! -f "state/${{ matrix.name }}.json" ] && [ -f state/images.json ]; then
+            cp state/images.json "state/${{ matrix.name }}.json"; echo "seeded from the images state"
+          fi
       - name: Collect
         timeout-minutes: 325
         env:
@@ -82,6 +100,8 @@ jobs:
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
           LIVE: ${{ vars.LIVE == 'true' && inputs.dry_run != true }}
+          FOCUS_PARTS: ${{ matrix.focus_parts }}
+          IMAGES_PARTS: ${{ matrix.images_parts }}
         run: |
           budget=$(cat budget.txt)
           flag=$([ "$LIVE" = "true" ] && echo --live || echo "")

@@ -6,8 +6,8 @@ import os
 import time
 
 from .common import get, safe, session
-from .images import CAP, _is_img
-from .util import IMAGES, download
+from .images import CAP, chosen, queue, run_parts
+from .util import IMAGES
 
 THEMES = {
     "Buildings & Architecture": {
@@ -55,10 +55,9 @@ def _save(s, sink, st, url, theme, kind, q, source, title, e):
     if st["focus_bytes"] >= st["focus_cap"]:
         sink.slice_end = 0
         return 0
-    n = download(s, url, CAP, sink, f"{IMAGES}/{theme}/{kind}/{safe(q.title(), 50)}/{source}/{safe(title, 100)}.{e}",
-                 _is_img)
-    st["focus_bytes"] += n
-    return 1 if n else 0
+    queue(sink, st, url, f"{IMAGES}/{theme}/{kind}/{safe(q.title(), 50)}/{source}/{safe(title, 100)}.{e}",
+          "focus_bytes")
+    return 0
 
 
 def _ext(url, default="jpg"):
@@ -219,20 +218,9 @@ def focus(sink, st):
     from .images import LIMIT
     st.setdefault("focus_bytes", 0)
     st["focus_cap"] = int(LIMIT * 0.7)
-    parts = [p for p in PARTS if p.__name__ in ("commons", "openverse") or os.environ.get(
+    parts = [p for p in chosen(PARTS, "FOCUS_PARTS") if p.__name__ in ("commons", "openverse") or os.environ.get(
         {"unsplash": "UNSPLASH_ACCESS_KEY", "pexels": "PEXELS_API_KEY", "pixabay": "PIXABAY_API_KEY"}[p.__name__])]
-    end = sink.slice_end
-    n = 0
-    for i, part in enumerate(parts):
-        if st["focus_bytes"] >= st["focus_cap"]:
-            break
-        sink.slice_end = time.time() + max(60, (end - time.time()) / (len(parts) - i))
-        try:
-            n += part(sink, st)
-        except Exception as exc:  # one source failing must not stop the others
-            print(f"focus/{part.__name__}: {type(exc).__name__}")
-        sink.slice_end = end
-    return n
+    return run_parts(sink, st, parts, "focus_bytes", st["focus_cap"])
 
 
 SOURCES = {"focus": focus}

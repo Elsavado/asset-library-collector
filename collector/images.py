@@ -1,9 +1,10 @@
 """Images (.jpg .jpeg .png .tiff), about 250 GB in all: Wikimedia Commons quality images, NASA image library,
 The Met and the Art Institute of Chicago open-access collections. Filed by format, then collection."""
+import os
 import time
 
 from .common import get, safe, session
-from .util import IMAGES, download
+from .util import IMAGES, fetch_many
 
 LIMIT = 250 * 2 ** 30
 CAP = 40 * 2 ** 20
@@ -19,6 +20,30 @@ def _fmt(url):
     return {"jpg": "JPG", "jpeg": "JPEG", "png": "PNG", "tif": "TIFF", "tiff": "TIFF"}.get(e)
 
 
+PENDING = []      # (url, rel, bytes counter key): downloaded 12 at a time by flush()
+SAVED = [0]
+BATCH = 48
+
+
+def queue(sink, st, url, rel, key):
+    """Queue one image; the queue is fetched in parallel once BATCH items wait (and at the end of each part)."""
+    PENDING.append((url, rel, key))
+    if len(PENDING) >= BATCH:
+        flush(sink, st)
+
+
+def flush(sink, st):
+    if not PENDING:
+        return
+    items = PENDING[:]
+    del PENDING[:]
+    sizes = {}
+    saved = fetch_many(sink, [(u, CAP, rel, _is_img) for u, rel, _k in items], sizes)
+    for _u, rel, k in items:
+        st[k] = st.get(k, 0) + sizes.get(rel, 0)
+    SAVED[0] += len(saved)
+
+
 def _save(s, sink, st, url, coll, title):
     fmt = _fmt(url)
     if st["img_bytes"] >= st.get("img_cap", LIMIT):
@@ -27,9 +52,8 @@ def _save(s, sink, st, url, coll, title):
     if not fmt:
         return 0
     e = url.split("?", 1)[0].rsplit(".", 1)[-1].lower()
-    n = download(s, url, CAP, sink, f"{IMAGES}/{fmt}/{coll}/{safe(title, 110)}.{e}", _is_img)
-    st["img_bytes"] += n
-    return 1 if n else 0
+    queue(sink, st, url, f"{IMAGES}/{fmt}/{coll}/{safe(title, 110)}.{e}", "img_bytes")
+    return 0
 
 
 COMMONS = ["Category:Quality images", "Category:Featured pictures on Wikimedia Commons", "Category:Valued images"]
@@ -143,20 +167,38 @@ def artic(sink, st):
 PARTS = [commons, nasa, met, artic]
 
 
+def run_parts(sink, st, parts, cap_key, cap):
+    """Runs the parts one after another, the time slice shared between them; returns the images saved."""
+    end = sink.slice_end
+    before = SAVED[0]
+    for i, part in enumerate(parts):
+        if st.get(cap_key, 0) >= cap:
+            break
+        sink.slice_end = time.time() + max(60, (end - time.time()) / (len(parts) - i))
+        try:
+            part(sink, st)
+        except Exception as exc:  # one source failing must not stop the others
+            print(f"{part.__module__.rsplit('.', 1)[-1]}/{part.__name__}: {type(exc).__name__}")
+        try:
+            flush(sink, st)
+        except Exception as exc:
+            del PENDING[:]
+            print(f"flush: {type(exc).__name__}")
+        sink.slice_end = end
+    return SAVED[0] - before
+
+
+def chosen(parts, env):
+    """IMAGES_PARTS / FOCUS_PARTS (comma list) pick the parts one matrix job runs; unset = all."""
+    want = [w.strip() for w in os.environ.get(env, "").split(",") if w.strip()]
+    return [p for p in parts if not want or p.__name__ in want]
+
+
 def images(sink, st):
-    """General collections: 30% of the image space (buildings and cars, in focus.py, take the other 70%);
-    the time slice is shared between the four collections so all of them grow."""
+    """General collections: 30% of the image space (buildings and cars, in focus.py, take the other 70%)."""
     st.setdefault("img_bytes", 0)
     st["img_cap"] = int(LIMIT * 0.3)
-    end = sink.slice_end
-    n = 0
-    for i, part in enumerate(PARTS):
-        if st["img_bytes"] >= st["img_cap"]:
-            break
-        sink.slice_end = time.time() + max(60, (end - time.time()) / (len(PARTS) - i))
-        n += part(sink, st)
-        sink.slice_end = end
-    return n
+    return run_parts(sink, st, chosen(PARTS, "IMAGES_PARTS"), "img_bytes", st["img_cap"])
 
 
 SOURCES = {"images": images}

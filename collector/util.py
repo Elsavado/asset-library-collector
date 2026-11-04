@@ -139,9 +139,10 @@ def _grab(url, cap, magic, conv=None, timeout=120):
 POOL = ThreadPoolExecutor(12)
 
 
-def fetch_many(sink, items):
+def fetch_many(sink, items, sizes=None):
     """Downloads (url, cap, rel, magic[, conv]) items 12 at a time; files reach the sink from this thread only (a
-    hand-over to Drive never sees a half-written file). Returns the rels saved."""
+    hand-over to Drive never sees a half-written file). Returns the rels saved; sizes (a dict), when given, gets
+    rel -> bytes saved."""
     STOP_AT[0] = min(sink.deadline, sink.slice_end + 20 * 60)
     futs = {POOL.submit(_grab, *it[:2], *it[3:]): it[2] for it in items}
     saved = []
@@ -150,4 +151,6 @@ def fetch_many(sink, items):
         if body:
             sink.write_bytes(futs[f], body)
             saved.append(futs[f])
+            if sizes is not None:
+                sizes[futs[f]] = len(body)
     return saved
