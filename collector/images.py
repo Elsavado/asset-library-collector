@@ -3,6 +3,7 @@ The Met and the Art Institute of Chicago open-access collections. Filed by forma
 import os
 import time
 
+from . import split
 from .common import get, safe, session
 from .util import IMAGES, fetch_many
 
@@ -49,8 +50,8 @@ def _save(s, sink, st, url, coll, title):
     if st["img_bytes"] >= st.get("img_cap", LIMIT):
         sink.slice_end = 0  # image share used up: end this collection's slice
         return 0
-    if not fmt:
-        return 0
+    if not fmt or split.image_owner(coll, title, title) != "assets":
+        return 0  # road-sign images belong to the mobility Drive (split.py)
     e = url.split("?", 1)[0].rsplit(".", 1)[-1].lower()
     queue(sink, st, url, f"{IMAGES}/{fmt}/{coll}/{safe(title, 110)}.{e}", "img_bytes")
     return 0

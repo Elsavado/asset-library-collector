@@ -10,6 +10,7 @@ import tarfile
 import time
 from urllib.parse import quote
 
+from . import split
 from .common import get, safe, session
 from .util import MODELS, download, fetch_many, gh, gh_file, gh_tree, not_html
 
@@ -48,6 +49,10 @@ def sketchfab(sink, st, lane="sketchfab"):
     if not r:
         return 0
     paths = json.loads(gzip.decompress(r.content))
+    lv = get(s, f"{OBJA}/lvis-annotations.json.gz")  # LVIS objects belong to the Lintel Drive (split.py)
+    if not lv:
+        return 0
+    lvis = {u for uids in json.loads(gzip.decompress(lv.content)).values() for u in uids}
     shards = {}
     for uid, p in paths.items():
         shards.setdefault(p.split("/")[1], []).append((uid, p))
@@ -66,12 +71,14 @@ def sketchfab(sink, st, lane="sketchfab"):
             items = []
             for uid, p in objs[pos["i"]:pos["i"] + 48]:  # 48 at a time, fetched 12 in parallel
                 md = meta.get(uid) or {}
+                if split.objaverse_owner(uid, md, lvis) != "assets":
+                    continue  # another Drive's object (vehicles: mobility; LVIS / buildings: Lintel)
                 cats = md.get("categories") or []
                 cat = safe(cats[0].get("name") if cats and isinstance(cats[0], dict) else "Uncategorised", 50)
                 name = safe(md.get("name") or uid, 70)
                 items.append((f"{OBJA}/{p}", CAP, f"{MODELS}/GLB/Sketchfab/{cat}/{name} {uid[:8]}.glb",
                               lambda h: h[:4] == b"glTF"))
-            pos["i"] += len(items)
+            pos["i"] += min(48, len(objs) - pos["i"])
             got = len(fetch_many(sink, items))
             n += got
             st["added"] = st.get("added", 0) + got
@@ -111,6 +118,8 @@ def github_models(sink, st, cache="cache/github.parquet"):
                 owner, repo, _, sha, path = rest.split("/", 4)
             except ValueError:
                 continue
+            if split.repo_owner(f"{owner}/{repo}") != "assets":
+                continue  # the Lintel Drive's repository (split.py)
             fname = path.rsplit("/", 1)[-1]
             base = f"{MODELS}/{FOLDER[ft]}/GitHub/{safe(repo, 60)} {sha[:6]}"
             if gh_file(s, sink, f"{owner}/{repo}", sha, quote(path), f"{base}/{safe(fname, 100)}", CAP):

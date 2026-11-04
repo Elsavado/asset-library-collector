@@ -3,6 +3,7 @@ of the Drive goes to 3D models. Curated part libraries and sample sets first, th
 repositories for CAD topics."""
 from urllib.parse import quote
 
+from . import split
 from .common import get, safe
 from .util import CAD, gh, gh_file, gh_search, gh_tree
 
@@ -34,6 +35,8 @@ def _ext(p):
 
 
 def _repo(s, sink, st, repo, branch, coll):
+    if split.repo_owner(repo) != "assets":
+        return 0  # the Lintel Drive's repository (split.py)
     files = [f for f in gh_tree(s, repo, branch) if _ext(f["path"]) in FOLDER and f.get("size", 0) <= CAP]
     n = 0
     for f in files:

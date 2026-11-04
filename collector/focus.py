@@ -5,6 +5,7 @@ PEXELS_API_KEY, PIXABAY_API_KEY). Filed as 03 Images/<Buildings & Architecture |
 import os
 import time
 
+from . import split
 from .common import get, safe, session
 from .images import CAP, chosen, queue, run_parts
 from .util import IMAGES
@@ -55,6 +56,8 @@ def _save(s, sink, st, url, theme, kind, q, source, title, e):
     if st["focus_bytes"] >= st["focus_cap"]:
         sink.slice_end = 0
         return 0
+    if split.image_owner(source, title, title, theme) != "assets":
+        return 0  # another Drive's image: buildings are shared with Lintel by id, road signs are mobility's
     queue(sink, st, url, f"{IMAGES}/{theme}/{kind}/{safe(q.title(), 50)}/{source}/{safe(title, 100)}.{e}",
           "focus_bytes")
     return 0
