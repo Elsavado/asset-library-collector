@@ -9,10 +9,10 @@ import subprocess
 import time
 import traceback
 
-from . import adobe, boxmodels, brex, cad, docs, focus, images, models, sheets, zoom
+from . import adobe, boxmodels, brex, cad, docs, figma, focus, images, models, sheets, zoom
 from .common import Sink, State
 
-SOURCES = {**adobe.SOURCES, **docs.SOURCES, **boxmodels.SOURCES, **models.SOURCES, **cad.SOURCES, **images.SOURCES, **focus.SOURCES, **sheets.SOURCES, **brex.SOURCES, **zoom.SOURCES}
+SOURCES = {**adobe.SOURCES, **figma.SOURCES, **docs.SOURCES, **boxmodels.SOURCES, **models.SOURCES, **cad.SOURCES, **images.SOURCES, **focus.SOURCES, **sheets.SOURCES, **brex.SOURCES, **zoom.SOURCES}
 
 
 def main():

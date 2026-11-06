@@ -3,3 +3,4 @@ state/
 cache/
 __pycache__/
 budget.txt
+node_modules/
