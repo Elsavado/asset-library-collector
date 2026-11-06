@@ -62,7 +62,7 @@ jobs:
             focus_parts: none
             images_parts: nasa,met
           - name: assets
-            sources: adobe,brex_reference,brex_companies,zoom_generated,zoom_real,sheets,cad
+            sources: adobe,zoom_generated,zoom_real,sheets,cad
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
