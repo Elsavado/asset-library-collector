@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 from .common import get, safe, session
 from .util import ZOOM, download
 
-REAL, MADE = 15, 15
+REAL, MADE = 30, 0  # 2026-11-07: generated calls deleted, real public meetings only
 IA = "https://archive.org"
 
 

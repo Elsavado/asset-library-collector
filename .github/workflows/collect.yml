@@ -37,18 +37,25 @@ jobs:
         include:
           - name: sketchfab
             sources: sketchfab
+            cap: models
           - name: sketchfab_mid
             sources: sketchfab_mid
+            cap: models
           - name: sketchfab_rev
             sources: sketchfab_rev
+            cap: models
           - name: docs_reports
             sources: ntrs,fedreg
+            cap: docs
           - name: docs_web
             sources: commoncrawl,gutenberg
+            cap: docs
           - name: github
             sources: github_models
+            cap: models
           - name: collections
             sources: thingiverse,thingi10k,smithsonian,polyhaven,curated
+            cap: models
           - name: images
             sources: focus,images
             focus_parts: commons
@@ -62,7 +69,7 @@ jobs:
             focus_parts: none
             images_parts: nasa,met
           - name: assets
-            sources: adobe,zoom_generated,zoom_real,sheets,cad
+            sources: adobe,zoom_real,sheets,cad
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -102,6 +109,10 @@ jobs:
           LIVE: ${{ vars.LIVE == 'true' && inputs.dry_run != true }}
           FOCUS_PARTS: ${{ matrix.focus_parts }}
           IMAGES_PARTS: ${{ matrix.images_parts }}
+          # caps (user 2026-11-07): 3D models 301,000 files over 5 jobs, documents 211,000 files over 2 jobs
+          CAP_FOLDER: ${{ matrix.cap == 'models' && '01 3D Models' || matrix.cap == 'docs' && '08 Documents' || '' }}
+          CAP_TOTAL: ${{ matrix.cap == 'models' && '301000' || matrix.cap == 'docs' && '211000' || '' }}
+          CAP_JOBS: ${{ matrix.cap == 'models' && '5' || matrix.cap == 'docs' && '2' || '' }}
         run: |
           budget=$(cat budget.txt)
           flag=$([ "$LIVE" = "true" ] && echo --live || echo "")

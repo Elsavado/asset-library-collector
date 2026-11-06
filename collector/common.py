@@ -128,6 +128,7 @@ class Sink:
         self.slice_end = deadline  # per-source time slice, set by the runner
         self.sent_bytes = 0
         self.files = 0
+        self.max_files = None  # this job's share of a folder cap (set by the runner)
         self.pending = 0
         self.stopped = False  # Drive refused uploads (daily upload limit): stop this run, resume next run
         os.makedirs(out, exist_ok=True)
@@ -165,7 +166,7 @@ class Sink:
         return True
 
     def full(self):
-        if self.stopped:
+        if self.stopped or (self.max_files is not None and self.files >= self.max_files):
             return True
         return self.sent_bytes + self.pending >= self.budget or time.time() > min(self.deadline, self.slice_end)
 
