@@ -33,6 +33,7 @@ jobs:
     timeout-minutes: 350
     strategy:
       fail-fast: false
+      max-parallel: 10  # account limit 20: Financelitics 9, ops-data 1 (2026-11-07)
       matrix:
         include:
           - name: sketchfab
@@ -64,10 +65,6 @@ jobs:
             sources: focus
             focus_parts: openverse,pixabay,unsplash,pexels
             images_parts: none
-          - name: images_museums
-            sources: images
-            focus_parts: none
-            images_parts: nasa,met
           - name: assets
             sources: adobe,figma,zoom_real,sheets,cad
     steps:
