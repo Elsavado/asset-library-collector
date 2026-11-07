@@ -20,7 +20,8 @@ from .util import POOL, fetch_many, not_html
 DOCS = "08 Documents"
 TYPE = {"pdf": "PDF", "txt": "TXT", "docx": "DOCX", "doc": "DOC", "dwg": "DWG"}
 CAP = 40 * 2 ** 20
-QUOTA = {"ntrs": 70000, "fedreg": 60000, "gutenberg": 30000, "commoncrawl": 60000}
+# 2026-11-07: the folder cap (211,000 files) decides when to stop
+QUOTA = {"ntrs": 150000, "fedreg": 150000, "gutenberg": 60000, "commoncrawl": 60000}
 
 is_pdf = lambda h: h[:5] == b"%PDF-"
 

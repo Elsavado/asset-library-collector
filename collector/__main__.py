@@ -31,11 +31,23 @@ def main():
     # folder caps (user 2026-11-07: 3D models stop at 301,000 files, documents at 211,000): the files already in the
     # folder are counted, and each of the CAP_JOBS jobs filling it may add an equal share of what is left
     if os.environ.get("CAP_FOLDER") and os.environ.get("CAP_TOTAL"):
-        r = subprocess.run(["rclone", "size", f"{a.remote}/{os.environ['CAP_FOLDER']}", "--json", "--fast-list", "-q"],
-                           capture_output=True, text=True, timeout=3600)
-        if r.returncode != 0:
+        have = None
+        for i in range(4):  # 2026-11-07: five jobs counting at once sometimes failed
+            try:
+                r = subprocess.run(["rclone", "size", f"{a.remote}/{os.environ['CAP_FOLDER']}", "--json", "--fast-list",
+                                    "--tpslimit", "8", "-q"], capture_output=True, text=True, timeout=3600)
+                if r.returncode == 0:
+                    have = json.loads(r.stdout)["count"]
+                    break
+            except (subprocess.TimeoutExpired, ValueError):
+                pass
+            time.sleep(60 * (i + 1))
+        last = st.data.get("_cap_last")
+        if have is None and last:  # the last count plus what this job has added since
+            have = last
+        if have is None:
             raise SystemExit("could not count the capped folder; nothing collected")
-        have = json.loads(r.stdout)["count"]
+        st.data["_cap_last"] = have
         left = int(os.environ["CAP_TOTAL"]) - have
         sink.max_files = max(0, left // int(os.environ.get("CAP_JOBS") or 1))
         print(f"cap: {have} files of {os.environ['CAP_TOTAL']}; this job may add {sink.max_files}")
@@ -64,6 +76,9 @@ def main():
                 sink.flush()
             except Exception:
                 traceback.print_exc()
+    if sink.max_files is not None:
+        st.data["_cap_last"] = st.data.get("_cap_last", 0) + sink.files
+        st.save()
     print(f"done: {sink.files} files, {sink.sent_bytes / 2 ** 30:.2f} GB, live={a.live}")
     if failed:
         raise SystemExit(f"failed sources: {', '.join(failed)}")

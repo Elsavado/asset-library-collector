@@ -37,7 +37,8 @@ def _parquet(s, url, path, columns, filters=None):
 
 
 # models each Sketchfab lane adds from 2026-11-02 on (with the GitHub lane the library reaches ~230,000)
-QUOTA = {"sketchfab": 50000, "sketchfab_mid": 50000, "sketchfab_rev": 50000, "github_models": 20000}
+# 2026-11-07: the folder cap (301,000 files, CAP_* in the workflow) decides when to stop; these only keep lanes apart
+QUOTA = {"sketchfab": 150000, "sketchfab_mid": 150000, "sketchfab_rev": 150000, "github_models": 80000}
 
 
 def sketchfab(sink, st, lane="sketchfab"):
