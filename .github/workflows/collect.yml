@@ -13,7 +13,7 @@ on:
     inputs:
       minutes:
         description: "time budget per job (minutes)"
-        default: "320"
+        default: "270"
       dry_run:
         description: "force a dry run (no upload)"
         type: boolean
@@ -117,7 +117,7 @@ jobs:
           budget=$(cat budget.txt)
           flag=$([ "$LIVE" = "true" ] && echo --live || echo "")
           python -m collector --sources "${{ matrix.sources }}" --state state/${{ matrix.name }}.json \
-            --budget-gb "$budget" --minutes "${{ inputs.minutes || 300 }}" $flag
+            --budget-gb "$budget" --minutes "${{ inputs.minutes || 270 }}" $flag
       - name: Save run state
         if: always()
         uses: actions/cache/save@v4
