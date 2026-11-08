@@ -1,0 +1,27 @@
+name: count
+
+# Read-only count of the Drive (files and size, whole Drive and per top-level folder). Uploads nothing.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  count:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/rclone
+        with:
+          conf: ${{ secrets.RCLONE_CONF }}
+      - name: Count
+        run: |
+          echo "## Drive count $(date -u '+%Y-%m-%d %H:%M UTC')" >> "$GITHUB_STEP_SUMMARY"
+          rclone about pax: | grep -E "^(Total|Used|Free)" | tee -a "$GITHUB_STEP_SUMMARY"
+          rclone size pax: --fast-list --tpslimit 8 --json | tee whole.json
+          echo "WHOLE DRIVE: $(cat whole.json)" >> "$GITHUB_STEP_SUMMARY"
+          rclone lsf pax: --dirs-only --max-depth 1 | while IFS= read -r d; do
+            echo "FOLDER ${d%/}: $(rclone size "pax:${d%/}" --fast-list --tpslimit 8 --json)" | tee -a "$GITHUB_STEP_SUMMARY"
+          done
