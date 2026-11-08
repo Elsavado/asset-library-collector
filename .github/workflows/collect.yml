@@ -7,8 +7,7 @@ name: collect
 # This repository is public: logs print counts only.
 
 on:
-  schedule:
-    - cron: "23 */6 * * *"
+  # schedule removed 2026-11-08: user "meet the target then stop them" (no automatic restarts)
   workflow_dispatch:
     inputs:
       minutes:
@@ -18,6 +17,12 @@ on:
         description: "force a dry run (no upload)"
         type: boolean
         default: false
+      only:
+        description: "run only these jobs (comma-separated matrix names); blank = all"
+        default: ""
+      assets_sources:
+        description: "sources of the assets job"
+        default: "adobe,figma,zoom_real,sheets,cad"
 
 concurrency:
   group: collect
@@ -37,24 +42,31 @@ jobs:
       matrix:
         include:
           - name: sketchfab
+            cap_index: 0
             sources: sketchfab
             cap: models
           - name: sketchfab_mid
+            cap_index: 1
             sources: sketchfab_mid
             cap: models
           - name: sketchfab_rev
+            cap_index: 2
             sources: sketchfab_rev
             cap: models
           - name: docs_reports
+            cap_index: 0
             sources: ntrs,fedreg
             cap: docs
           - name: docs_web
+            cap_index: 1
             sources: commoncrawl,gutenberg
             cap: docs
           - name: github
+            cap_index: 3
             sources: github_models
             cap: models
           - name: collections
+            cap_index: 4
             sources: thingiverse,thingi10k,smithsonian,polyhaven,curated
             cap: models
           - name: images
@@ -99,6 +111,7 @@ jobs:
             cp state/images.json "state/${{ matrix.name }}.json"; echo "seeded from the images state"
           fi
       - name: Collect
+        if: ${{ !inputs.only || contains(format(',{0},', inputs.only), format(',{0},', matrix.name)) }}
         timeout-minutes: 325
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -113,10 +126,12 @@ jobs:
           CAP_FOLDER: ${{ matrix.cap == 'models' && '01 3D Models' || matrix.cap == 'docs' && '08 Documents' || '' }}
           CAP_TOTAL: ${{ matrix.cap == 'models' && '301000' || matrix.cap == 'docs' && '211000' || '' }}
           CAP_JOBS: ${{ matrix.cap == 'models' && '5' || matrix.cap == 'docs' && '2' || '' }}
+          CAP_INDEX: ${{ matrix.cap_index }}
         run: |
           budget=$(cat budget.txt)
           flag=$([ "$LIVE" = "true" ] && echo --live || echo "")
-          python -m collector --sources "${{ matrix.sources }}" --state state/${{ matrix.name }}.json \
+          src="${{ matrix.sources }}"; [ "${{ matrix.name }}" = assets ] && src="${{ inputs.assets_sources || matrix.sources }}"
+          python -m collector --sources "$src" --state state/${{ matrix.name }}.json \
             --budget-gb "$budget" --minutes "${{ inputs.minutes || 270 }}" $flag
       - name: Save run state
         if: always()

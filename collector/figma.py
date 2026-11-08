@@ -104,6 +104,12 @@ def figma(sink, st):
     s = gh()
     done = st.setdefault("figma_repos", [])
     pages = st.setdefault("figma_page", {})
+    if sink.live:  # count what is really on the Drive (two same-named files had overwritten each other: 129, not 130)
+        import subprocess
+        r = subprocess.run(["rclone", "lsf", "-R", "--files-only", f"{sink.remote}/{FIGMA}", "-q"],
+                           capture_output=True, text=True, timeout=900)
+        if r.returncode == 0:
+            st["figma_count"] = sum(1 for x in r.stdout.splitlines() if x.lower().endswith(".fig"))
     count = lambda: st.get("figma_count", 0)  # noqa: E731
     n = 0
     for q in QUERIES:
@@ -136,7 +142,8 @@ def figma(sink, st):
                         new = None
                     if not new:
                         continue
-                    sink.write_bytes(f"{FIGMA}/{safe(item['name'], 60)}/{title}.fig", new)
+                    tag = __import__("hashlib").md5(f"{name}/{path}".encode()).hexdigest()[:6]
+                    sink.write_bytes(f"{FIGMA}/{safe(item['name'], 60)}/{title} {tag}.fig", new)
                     st["figma_count"] = count() + 1
                     took += 1
                     n += 1

@@ -49,7 +49,8 @@ def main():
             raise SystemExit("could not count the capped folder; nothing collected")
         st.data["_cap_last"] = have
         left = int(os.environ["CAP_TOTAL"]) - have
-        sink.max_files = max(0, left // int(os.environ.get("CAP_JOBS") or 1))
+        jobs, idx = int(os.environ.get("CAP_JOBS") or 1), int(os.environ.get("CAP_INDEX") or 0)
+        sink.max_files = max(0, left // jobs + (1 if idx < left % jobs else 0))  # shares add up to exactly the cap
         print(f"cap: {have} files of {os.environ['CAP_TOTAL']}; this job may add {sink.max_files}")
         if sink.max_files == 0:
             print("cap reached: nothing to collect")
