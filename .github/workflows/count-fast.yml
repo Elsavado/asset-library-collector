@@ -1,0 +1,47 @@
+name: count-fast
+
+# Read-only Drive count, one parallel job per top-level folder (for Drives with 500k+ files). Uploads nothing.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  folders:
+    runs-on: ubuntu-latest
+    outputs:
+      list: ${{ steps.l.outputs.list }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/rclone
+        with:
+          conf: ${{ secrets.RCLONE_CONF }}
+      - id: l
+        run: |
+          rclone lsf pax: --dirs-only --max-depth 1 > top.txt
+          rclone lsf "pax:Asset Library" --dirs-only --max-depth 1 | sed 's|^|Asset Library/|' >> top.txt
+          python3 -c "import json;l=[x.strip().rstrip('/') for x in open('top.txt') if x.strip() and x.strip()!='Asset Library/'];print('list='+json.dumps(l))" >> "$GITHUB_OUTPUT"
+          rclone lsf pax: --files-only --max-depth 1 | wc -l | sed 's/^/files at Drive root: /'
+          rclone lsf "pax:Asset Library" --files-only --max-depth 1 | wc -l | sed 's/^/files directly in Asset Library: /'
+          rclone about pax: | grep -E "^(Total|Used|Free)"
+  count:
+    needs: folders
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        folder: ${{ fromJSON(needs.folders.outputs.list) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/rclone
+        with:
+          conf: ${{ secrets.RCLONE_CONF }}
+      - env:
+          F: ${{ matrix.folder }}
+        run: |
+          r=$(rclone size "pax:$F" --fast-list --tpslimit 6 --json)
+          echo "COUNT $F: $r"
+          echo "COUNT $F: $r" >> "$GITHUB_STEP_SUMMARY"
