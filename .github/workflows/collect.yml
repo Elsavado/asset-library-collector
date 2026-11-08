@@ -20,6 +20,9 @@ on:
       only:
         description: "run only these jobs (comma-separated matrix names); blank = all"
         default: ""
+      cap_jobs:
+        description: "override how many jobs share a capped folder (blank = 5 for models, 2 for documents)"
+        default: ""
       assets_sources:
         description: "sources of the assets job"
         default: "adobe,figma,zoom_real,sheets,cad"
@@ -125,7 +128,7 @@ jobs:
           # caps (user 2026-11-07): 3D models 301,000 files over 5 jobs, documents 211,000 files over 2 jobs
           CAP_FOLDER: ${{ matrix.cap == 'models' && '01 3D Models' || matrix.cap == 'docs' && '08 Documents' || '' }}
           CAP_TOTAL: ${{ matrix.cap == 'models' && '301000' || matrix.cap == 'docs' && '211000' || '' }}
-          CAP_JOBS: ${{ matrix.cap == 'models' && '5' || matrix.cap == 'docs' && '2' || '' }}
+          CAP_JOBS: ${{ inputs.cap_jobs || matrix.cap == 'models' && '5' || matrix.cap == 'docs' && '2' || '' }}
           CAP_INDEX: ${{ matrix.cap_index }}
         run: |
           budget=$(cat budget.txt)
